@@ -21,6 +21,21 @@ mcp = FastMCP("Google Analytics Tools")
 # Server startup
 logger.info("Starting Google Analytics MCP Server...")
 
+# Account filtering configuration
+ALLOWED_GA4_ACCOUNT_IDS = os.environ.get("ALLOWED_GA4_ACCOUNT_IDS", "").strip()
+if ALLOWED_GA4_ACCOUNT_IDS:
+    ALLOWED_ACCOUNT_IDS_LIST = [acc.strip() for acc in ALLOWED_GA4_ACCOUNT_IDS.split(",")]
+    logger.info(f"Account filtering enabled (by ID): {ALLOWED_ACCOUNT_IDS_LIST}")
+else:
+    ALLOWED_ACCOUNT_IDS_LIST = None
+    logger.info("No account filtering - all accounts accessible")
+
+def is_account_allowed(account_id: str) -> bool:
+    """Check if an account ID is in the allowed list"""
+    if ALLOWED_ACCOUNT_IDS_LIST is None:
+        return True  # No filtering, allow all
+    return account_id in ALLOWED_ACCOUNT_IDS_LIST
+
 @mcp.tool
 def list_properties(
     account_id: str = "",
@@ -139,6 +154,13 @@ def list_properties(
             for account in accounts:
                 account_name = account.get('name', '')  # Format: accounts/123456789
                 account_id_extracted = account_name.split('/')[-1] if account_name else 'Unknown'
+                account_display_name = account.get('displayName', 'Unknown')
+
+                # Check if account is allowed (by ID)
+                if not is_account_allowed(account_id_extracted):
+                    if ctx:
+                        ctx.info(f"Skipping filtered account: {account_display_name} (ID: {account_id_extracted})")
+                    continue
                 
                 properties_url = f"https://analyticsadmin.googleapis.com/{api_version}/{account_name}/properties"
                 
